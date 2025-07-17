@@ -1,420 +1,606 @@
 #include "TpccGenerator.hpp"
-#include "CsvWriter.hpp"
-
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cassert>
+#include <chrono>
+#include <cstdint>
 #include <cstring>
+#include <iostream>
+#include <numeric>
+
+namespace tpcc {
 
 using namespace std;
 
-TpccGenerator::TpccGenerator(int64_t warehouse_count, const string &folder)
-        : warehouse_count(warehouse_count)
-          , folder(folder)
-          , ranny(42)
-{
+TpccGenerator::TpccGenerator(int64_t warehouse_count, std::unique_ptr<Writer> writer)
+    : warehouse_count_(warehouse_count), writer_(std::move(writer)), ranny_(42) {
 }
 
-void TpccGenerator::generateWarehouses()
-{
-   cout << "Generating warehouse .. " << flush;
-
-   int64_t w_id;
-   array<char, 10> w_name = {};
-   array<char, 20> w_street_1 = {};
-   array<char, 20> w_street_2 = {};
-   array<char, 20> w_city = {};
-   array<char, 2> w_state = {};
-   array<char, 9> w_zip = {};
-   float w_tax;
-   float w_ytd;
-
-   csv::CsvWriter w_csv(folder + "/warehouse.csv");
-
-   for (w_id = 1L; w_id<=warehouse_count; w_id++) {
-      makeAlphaString(6, 10, w_name.data());
-      makeAddress(w_street_1.data(), w_street_2.data(), w_city.data(), w_state.data(), w_zip.data());
-      w_tax = ((float) makeNumber(10L, 20L)) / 100.0f;
-      w_ytd = 3000000.00f;
-
-      // @formatter:off
-      w_csv << w_id << w_name << w_street_1 << w_street_2 << w_city << w_state << w_zip << csv::Precision(4)
-            << w_tax << csv::Precision(2) << w_ytd << csv::endl;
-      // @formatter:on
-   }
-
-   cout << "ok !" << endl;
+// Schema创建方法
+Schema TpccGenerator::createWarehouseSchema() {
+    Schema schema("warehouse");
+    schema.addColumn("w_id", ColumnType::INT);
+    schema.addColumn("w_name", ColumnType::CHAR, 10);
+    schema.addColumn("w_street_1", ColumnType::CHAR, 20);
+    schema.addColumn("w_street_2", ColumnType::CHAR, 20);
+    schema.addColumn("w_city", ColumnType::CHAR, 20);
+    schema.addColumn("w_state", ColumnType::CHAR, 2);
+    schema.addColumn("w_zip", ColumnType::CHAR, 9);
+    schema.addColumn("w_tax", ColumnType::FLOAT);
+    schema.addColumn("w_ytd", ColumnType::FLOAT);
+    return schema;
 }
 
-void TpccGenerator::generateDistricts()
-{
-   cout << "Generating districts .. " << flush;
-
-   int64_t d_id;
-   int64_t d_w_id;
-   array<char, 10> d_name = {};
-   array<char, 20> d_street_1 = {};
-   array<char, 20> d_street_2 = {};
-   array<char, 20> d_city = {};
-   array<char, 2> d_state = {};
-   array<char, 9> d_zip = {};
-   float d_tax;
-   float d_ytd;
-   int64_t d_next_o_id;
-
-   csv::CsvWriter d_csv(folder + "/district.csv");
-
-   // Each warehouse has DIST_PER_WARE (10) districts
-   for (d_w_id = 1; d_w_id<=warehouse_count; d_w_id++) {
-      for (d_id = 1; d_id<=kDistrictsPerWarehouse; d_id++) {
-         d_ytd = 30000.0;
-         d_next_o_id = 3001L;
-         makeAlphaString(6L, 10L, d_name.data());
-         makeAddress(d_street_1.data(), d_street_2.data(), d_city.data(), d_state.data(), d_zip.data());
-         d_tax = ((float) makeNumber(10L, 20L)) / 100.0f;
-
-         // @formatter:off
-         d_csv << d_id << d_w_id << d_name << d_street_1 << d_street_2 << d_city << d_state << d_zip << csv::Precision(4)
-               << d_tax << csv::Precision(2) << d_ytd << d_next_o_id << csv::endl;
-         // @formatter:on
-      }
-   }
-
-   cout << "ok !" << endl;
+Schema TpccGenerator::createDistrictSchema() {
+    Schema schema("district");
+    schema.addColumn("d_id", ColumnType::INT);
+    schema.addColumn("d_w_id", ColumnType::INT);
+    schema.addColumn("d_name", ColumnType::CHAR, 10);
+    schema.addColumn("d_street_1", ColumnType::CHAR, 20);
+    schema.addColumn("d_street_2", ColumnType::CHAR, 20);
+    schema.addColumn("d_city", ColumnType::CHAR, 20);
+    schema.addColumn("d_state", ColumnType::CHAR, 2);
+    schema.addColumn("d_zip", ColumnType::CHAR, 9);
+    schema.addColumn("d_tax", ColumnType::FLOAT);
+    schema.addColumn("d_ytd", ColumnType::FLOAT);
+    schema.addColumn("d_next_o_id", ColumnType::INT);
+    return schema;
 }
 
-void TpccGenerator::generateCustomerAndHistory()
-{
-   cout << "Generating customers and their history .. " << flush;
-
-   int64_t c_id;
-   int64_t c_d_id;
-   int64_t c_w_id;
-   array<char, 16> c_first = {};
-   array<char, 2> c_middle = {};
-   array<char, 16> c_last = {};
-   array<char, 20> c_street_1 = {};
-   array<char, 20> c_street_2 = {};
-   array<char, 20> c_city = {};
-   array<char, 2> c_state = {};
-   array<char, 9> c_zip = {};
-   array<char, 16> c_phone = {};
-   array<char, 15> c_since = {}; // XXX used in history and customer and generated over and over again
-   array<char, 2> c_credit = {};
-   float c_credit_lim;
-   float c_discount;
-   float c_balance;
-   array<char, 500> c_data = {};
-   float h_amount;
-   array<char, 24> h_data = {};
-
-   csv::CsvWriter c_csv(folder + "/customer.csv");
-   csv::CsvWriter h_csv(folder + "/history.csv");
-
-   // Each warehouse has DIST_PER_WARE (10) districts
-   for (c_w_id = 1; c_w_id<=warehouse_count; c_w_id++) {
-      for (c_d_id = 1; c_d_id<=kDistrictsPerWarehouse; c_d_id++) {
-         for (c_id = 1; c_id<=kCustomerPerDistrict; c_id++) {
-            makeAlphaString(8, 16, c_first.data());
-            c_middle[0] = 'O';
-            c_middle[1] = 'E';
-            if (c_id<=1000)
-               makeLastName(c_id - 1, c_last.data());
-            else
-               makeLastName(makeNonUniformRandom(255, 0, 999), c_last.data());
-            makeAddress(c_street_1.data(), c_street_2.data(), c_city.data(), c_state.data(), c_zip.data());
-            makeNumberString(16, 16, c_phone.data());
-            c_credit[0] = makeNumber(0L, 1L) == 0 ? 'G' : 'B';
-            c_credit[1] = 'C';
-            c_credit_lim = 50000;
-            c_discount = ((float) makeNumber(0L, 50L)) / 100.0f;
-            c_balance = -10.0f;
-            makeNow(c_since.data());
-            makeAlphaString(300, 500, c_data.data());
-
-            // @formatter:off
-            c_csv << c_id << c_d_id << c_w_id << c_first << c_middle << c_last << c_street_1 << c_street_2 << c_city
-                  << c_state << c_zip << c_phone << c_since << c_credit << csv::Precision(2) << c_credit_lim
-                  << csv::Precision(4) << c_discount << csv::Precision(2) << c_balance << 10.0f << int64_t(1)
-                  << int64_t(0) << c_data << csv::endl;
-            // @formatter:on
-
-            h_amount = 10.0;
-            makeAlphaString(12, 24, h_data.data());
-
-            // @formatter:off
-            h_csv << c_id << c_d_id << c_w_id << c_d_id << c_w_id << c_since << h_amount << h_data << csv::endl;
-            // @formatter:on
-         }
-      }
-   }
-
-   cout << "ok !" << endl;
+Schema TpccGenerator::createCustomerSchema() {
+    Schema schema("customer");
+    schema.addColumn("c_id", ColumnType::INT);
+    schema.addColumn("c_d_id", ColumnType::INT);
+    schema.addColumn("c_w_id", ColumnType::INT);
+    schema.addColumn("c_first", ColumnType::CHAR, 16);
+    schema.addColumn("c_middle", ColumnType::CHAR, 2);
+    schema.addColumn("c_last", ColumnType::CHAR, 16);
+    schema.addColumn("c_street_1", ColumnType::CHAR, 20);
+    schema.addColumn("c_street_2", ColumnType::CHAR, 20);
+    schema.addColumn("c_city", ColumnType::CHAR, 20);
+    schema.addColumn("c_state", ColumnType::CHAR, 2);
+    schema.addColumn("c_zip", ColumnType::CHAR, 9);
+    schema.addColumn("c_phone", ColumnType::CHAR, 16);
+    schema.addColumn("c_since", ColumnType::CHAR, 15);  // 用字符串表示日期时间
+    schema.addColumn("c_credit", ColumnType::CHAR, 2);
+    schema.addColumn("c_credit_lim", ColumnType::FLOAT);
+    schema.addColumn("c_discount", ColumnType::FLOAT);
+    schema.addColumn("c_balance", ColumnType::FLOAT);
+    schema.addColumn("c_ytd_payment", ColumnType::FLOAT);
+    schema.addColumn("c_payment_cnt", ColumnType::INT);
+    schema.addColumn("c_delivery_cnt", ColumnType::INT);
+    schema.addColumn("c_data", ColumnType::CHAR, 300);
+    return schema;
 }
 
-void TpccGenerator::generateItems()
-{
-   cout << "Generating items .. " << flush;
-
-   int64_t i_id;
-   array<char, 24> i_name = {};
-   float i_price;
-   array<char, 50> i_data = {};
-   uint32_t i_data_size;
-   vector<bool> orig(kItemCount, false);
-   int64_t i_im_id;
-
-   csv::CsvWriter i_csv(folder + "/item.csv");
-
-   for (uint32_t i = 0; i<kItemCount / 10; i++) {
-      uint32_t pos;
-      do {
-         pos = makeNumber(0L, kItemCount - 1);
-      } while (orig[pos]);
-      orig[pos] = true;
-   }
-
-   for (i_id = 1; i_id<=kItemCount; i_id++) {
-      makeAlphaString(14, 24, i_name.data());
-      i_price = ((float) makeNumber(100L, 10000L)) / 100.0f;
-      i_data_size = makeAlphaString(26, 50, i_data.data());
-      i_im_id = makeNumber(0, 10000);
-      if (orig[i_id]) {
-         uint32_t pos = makeNumber(0L, i_data_size - 8);
-         i_data[pos] = 'o';
-         i_data[pos + 1] = 'r';
-         i_data[pos + 2] = 'i';
-         i_data[pos + 3] = 'g';
-         i_data[pos + 4] = 'i';
-         i_data[pos + 5] = 'n';
-         i_data[pos + 6] = 'a';
-         i_data[pos + 7] = 'l';
-      }
-
-      // @formatter:off
-      i_csv << i_id << i_im_id << i_name << csv::Precision(2) << i_price << i_data << csv::endl;
-      // @formatter:on
-   }
-
-   cout << "ok !" << endl;
+Schema TpccGenerator::createHistorySchema() {
+    Schema schema("history");
+    schema.addColumn("h_c_id", ColumnType::INT);
+    schema.addColumn("h_c_d_id", ColumnType::INT);
+    schema.addColumn("h_c_w_id", ColumnType::INT);
+    schema.addColumn("h_d_id", ColumnType::INT);
+    schema.addColumn("h_w_id", ColumnType::INT);
+    schema.addColumn("h_datetime", ColumnType::CHAR, 15);  // 用字符串表示日期时间
+    schema.addColumn("h_amount", ColumnType::FLOAT);
+    schema.addColumn("h_data", ColumnType::CHAR, 24);
+    return schema;
 }
 
-void TpccGenerator::generateStock()
-{
-   cout << "Generating stocks .. " << flush;
+Schema TpccGenerator::createItemSchema() {
+    Schema schema("item");
+    schema.addColumn("i_id", ColumnType::INT);
+    schema.addColumn("i_im_id", ColumnType::INT);
+    schema.addColumn("i_name", ColumnType::CHAR, 24);
+    schema.addColumn("i_price", ColumnType::FLOAT);
+    schema.addColumn("i_data", ColumnType::CHAR, 50);
+    return schema;
+}
 
-   int64_t s_i_id;
-   int64_t s_w_id;
-   int64_t s_quantity;
-   array<char, 24> s_dist_01 = {};
-   array<char, 24> s_dist_02 = {};
-   array<char, 24> s_dist_03 = {};
-   array<char, 24> s_dist_04 = {};
-   array<char, 24> s_dist_05 = {};
-   array<char, 24> s_dist_06 = {};
-   array<char, 24> s_dist_07 = {};
-   array<char, 24> s_dist_08 = {};
-   array<char, 24> s_dist_09 = {};
-   array<char, 24> s_dist_10 = {};
-   int64_t s_ytd = 0;
-   int64_t s_order_cnt = 0;
-   int64_t s_remote_cnt = 0;
-   array<char, 50> s_data = {};
-   vector<bool> orig(kItemCount, false);
+Schema TpccGenerator::createStockSchema() {
+    Schema schema("stock");
+    schema.addColumn("s_i_id", ColumnType::INT);
+    schema.addColumn("s_w_id", ColumnType::INT);
+    schema.addColumn("s_quantity", ColumnType::INT);
+    schema.addColumn("s_dist_01", ColumnType::CHAR, 24);
+    schema.addColumn("s_dist_02", ColumnType::CHAR, 24);
+    schema.addColumn("s_dist_03", ColumnType::CHAR, 24);
+    schema.addColumn("s_dist_04", ColumnType::CHAR, 24);
+    schema.addColumn("s_dist_05", ColumnType::CHAR, 24);
+    schema.addColumn("s_dist_06", ColumnType::CHAR, 24);
+    schema.addColumn("s_dist_07", ColumnType::CHAR, 24);
+    schema.addColumn("s_dist_08", ColumnType::CHAR, 24);
+    schema.addColumn("s_dist_09", ColumnType::CHAR, 24);
+    schema.addColumn("s_dist_10", ColumnType::CHAR, 24);
+    schema.addColumn("s_ytd", ColumnType::INT);
+    schema.addColumn("s_order_cnt", ColumnType::INT);
+    schema.addColumn("s_remote_cnt", ColumnType::INT);
+    schema.addColumn("s_data", ColumnType::CHAR, 50);
+    return schema;
+}
 
-   csv::CsvWriter s_csv(folder + "/stock.csv");
+Schema TpccGenerator::createOrdersSchema() {
+    Schema schema("orders");
+    schema.addColumn("o_id", ColumnType::INT);
+    schema.addColumn("o_d_id", ColumnType::INT);
+    schema.addColumn("o_w_id", ColumnType::INT);
+    schema.addColumn("o_c_id", ColumnType::INT);
+    schema.addColumn("o_entry_d", ColumnType::CHAR, 15);  // 用字符串表示日期时间
+    schema.addColumn("o_carrier_id", ColumnType::INT);
+    schema.addColumn("o_ol_cnt", ColumnType::INT);
+    schema.addColumn("o_all_local", ColumnType::INT);
+    return schema;
+}
 
-   for (s_w_id = 1; s_w_id<=warehouse_count; s_w_id++) {
-      orig.assign(kItemCount, false);
+Schema TpccGenerator::createNewOrdersSchema() {
+    Schema schema("new_orders");
+    schema.addColumn("no_o_id", ColumnType::INT);
+    schema.addColumn("no_d_id", ColumnType::INT);
+    schema.addColumn("no_w_id", ColumnType::INT);
+    return schema;
+}
 
-      for (uint32_t i = 0; i<kItemCount / 10; i++) {
-         int64_t pos;
-         do {
+Schema TpccGenerator::createOrderLineSchema() {
+    Schema schema("order_line");
+    schema.addColumn("ol_o_id", ColumnType::INT);
+    schema.addColumn("ol_d_id", ColumnType::INT);
+    schema.addColumn("ol_w_id", ColumnType::INT);
+    schema.addColumn("ol_number", ColumnType::INT);
+    schema.addColumn("ol_i_id", ColumnType::INT);
+    schema.addColumn("ol_supply_w_id", ColumnType::INT);
+    schema.addColumn("ol_delivery_d", ColumnType::CHAR, 15);  // 用字符串表示日期时间
+    schema.addColumn("ol_quantity", ColumnType::INT);
+    schema.addColumn("ol_amount", ColumnType::FLOAT);
+    schema.addColumn("ol_dist_info", ColumnType::CHAR, 24);
+    return schema;
+}
+
+std::string TpccGenerator::makeAlphaStringAsString(uint32_t min, uint32_t max) {
+    const static char *possible_values = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+    uint32_t len = makeNumber(min, max);
+    std::string result;
+    result.reserve(len);
+
+    for (uint32_t i = 0; i < len; i++) {
+        result += possible_values[ranny_() % 62];
+    }
+
+    return result;
+}
+
+std::string TpccGenerator::makeNumberStringAsString(uint32_t min, uint32_t max) {
+    const static char *possible_values = "0123456789";
+
+    uint32_t len = makeNumber(min, max);
+    std::string result;
+    result.reserve(len);
+
+    for (uint32_t i = 0; i < len; i++) {
+        result += possible_values[ranny_() % 10];
+    }
+
+    return result;
+}
+
+std::string TpccGenerator::makeNowAsString() {
+    return to_string(chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now().time_since_epoch()).count());
+}
+
+void TpccGenerator::generateWarehouses() {
+    cout << "Generating warehouse .. " << flush;
+
+    Schema schema = createWarehouseSchema();
+    std::unique_ptr<Writer> writer_;
+    writer_->beginTable(schema);
+
+    for (int64_t w_id = 1; w_id <= warehouse_count_; w_id++) {
+        Record record;
+
+        // 生成warehouse数据
+        record.push_back(static_cast<int64_t>(w_id));
+        record.push_back(makeAlphaStringAsString(6, 10));
+
+        // 生成地址信息
+        record.push_back(makeAlphaStringAsString(10, 20));  // w_street_1
+        record.push_back(makeAlphaStringAsString(10, 20));  // w_street_2
+        record.push_back(makeAlphaStringAsString(10, 20));  // w_city
+        record.push_back(makeAlphaStringAsString(2, 2));    // w_state
+        record.push_back(makeNumberStringAsString(9, 9));   // w_zip
+
+        record.push_back(static_cast<float>(makeNumber(10L, 20L)) / 100.0f);  // w_tax
+        record.push_back(3000000.00f);                                        // w_ytd
+
+        writer_->writeRecord(record);
+    }
+
+    writer_->endTable();
+    cout << "ok !" << endl;
+}
+
+void TpccGenerator::generateDistricts() {
+    cout << "Generating districts .. " << flush;
+
+    Schema schema = createDistrictSchema();
+    writer_->beginTable(schema);
+
+    // Each warehouse has DIST_PER_WARE (10) districts
+    for (int64_t d_w_id = 1; d_w_id <= warehouse_count_; d_w_id++) {
+        for (int64_t d_id = 1; d_id <= kDistrictsPerWarehouse; d_id++) {
+            Record record;
+
+            // 填充district数据
+            record.push_back(static_cast<int64_t>(d_id));
+            record.push_back(static_cast<int64_t>(d_w_id));
+            record.push_back(makeAlphaStringAsString(6, 10));  // d_name
+
+            // 生成地址信息
+            record.push_back(makeAlphaStringAsString(10, 20));  // d_street_1
+            record.push_back(makeAlphaStringAsString(10, 20));  // d_street_2
+            record.push_back(makeAlphaStringAsString(10, 20));  // d_city
+            record.push_back(makeAlphaStringAsString(2, 2));    // d_state
+            record.push_back(makeNumberStringAsString(9, 9));   // d_zip
+
+            record.push_back(static_cast<float>(makeNumber(10L, 20L)) / 100.0f);  // d_tax
+            record.push_back(30000.0f);                                           // d_ytd
+            record.push_back(static_cast<int64_t>(3001));                         // d_next_o_id
+
+            writer_->writeRecord(record);
+        }
+    }
+
+    writer_->endTable();
+    cout << "ok !" << endl;
+}
+
+void TpccGenerator::generateCustomerAndHistory() {
+    cout << "Generating customers and their history .. " << flush;
+
+    // 生成customer数据
+    Schema customerSchema = createCustomerSchema();
+    writer_->beginTable(customerSchema);
+
+    // Each warehouse has DIST_PER_WARE (10) districts
+    for (int64_t c_w_id = 1; c_w_id <= warehouse_count_; c_w_id++) {
+        for (int64_t c_d_id = 1; c_d_id <= kDistrictsPerWarehouse; c_d_id++) {
+            for (int64_t c_id = 1; c_id <= kCustomerPerDistrict; c_id++) {
+                Record record;
+
+                // 填充customer数据
+                record.push_back(static_cast<int64_t>(c_id));
+                record.push_back(static_cast<int64_t>(c_d_id));
+                record.push_back(static_cast<int64_t>(c_w_id));
+                record.push_back(makeAlphaStringAsString(8, 16));  // c_first
+                record.push_back(string("OE"));                    // c_middle
+
+                // 生成last name
+                string lastName;
+                if (c_id <= 1000) {
+                    char nameBuffer[32];
+                    makeLastName(c_id - 1, nameBuffer);
+                    lastName = string(nameBuffer);
+                } else {
+                    char nameBuffer[32];
+                    makeLastName(makeNonUniformRandom(255, 0, 999), nameBuffer);
+                    lastName = string(nameBuffer);
+                }
+                record.push_back(lastName);  // c_last
+
+                // 生成地址信息
+                record.push_back(makeAlphaStringAsString(10, 20));  // c_street_1
+                record.push_back(makeAlphaStringAsString(10, 20));  // c_street_2
+                record.push_back(makeAlphaStringAsString(10, 20));  // c_city
+                record.push_back(makeAlphaStringAsString(2, 2));    // c_state
+                record.push_back(makeNumberStringAsString(9, 9));   // c_zip
+
+                record.push_back(makeNumberStringAsString(16, 16));                  // c_phone
+                record.push_back(makeNowAsString());                                 // c_since
+                record.push_back(string(makeNumber(0L, 1L) == 0 ? "GC" : "BC"));     // c_credit
+                record.push_back(50000.0f);                                          // c_credit_lim
+                record.push_back(static_cast<float>(makeNumber(0L, 50L)) / 100.0f);  // c_discount
+                record.push_back(-10.0f);                                            // c_balance
+                record.push_back(10.0f);                                             // c_ytd_payment
+                record.push_back(static_cast<int64_t>(1));                           // c_payment_cnt
+                record.push_back(static_cast<int64_t>(0));                           // c_delivery_cnt
+                record.push_back(makeAlphaStringAsString(300, 300));                 // c_data
+
+                writer_->writeRecord(record);
+            }
+        }
+    }
+
+    writer_->endTable();
+
+    // 生成history数据
+    Schema historySchema = createHistorySchema();
+    writer_->beginTable(historySchema);
+
+    for (int64_t h_c_w_id = 1; h_c_w_id <= warehouse_count_; h_c_w_id++) {
+        for (int64_t h_c_d_id = 1; h_c_d_id <= kDistrictsPerWarehouse; h_c_d_id++) {
+            for (int64_t h_c_id = 1; h_c_id <= kCustomerPerDistrict; h_c_id++) {
+                Record record;
+
+                // 填充history数据
+                record.push_back(static_cast<int64_t>(h_c_id));
+                record.push_back(static_cast<int64_t>(h_c_d_id));
+                record.push_back(static_cast<int64_t>(h_c_w_id));
+                record.push_back(static_cast<int64_t>(h_c_d_id));
+                record.push_back(static_cast<int64_t>(h_c_w_id));
+                record.push_back(makeNowAsString());                // h_datetime
+                record.push_back(10.0f);                            // h_amount
+                record.push_back(makeAlphaStringAsString(12, 24));  // h_data
+
+                writer_->writeRecord(record);
+            }
+        }
+    }
+
+    writer_->endTable();
+    cout << "ok !" << endl;
+}
+
+void TpccGenerator::generateItems() {
+    cout << "Generating items .. " << flush;
+
+    vector<bool> orig(kItemCount, false);
+
+    Schema schema = createItemSchema();
+    writer_->beginTable(schema);
+
+    for (uint32_t i = 0; i < kItemCount / 10; i++) {
+        uint32_t pos;
+        do {
             pos = makeNumber(0L, kItemCount - 1);
-         } while (orig[pos]);
-         orig[pos] = 1;
-      }
+        } while (orig[pos]);
+        orig[pos] = true;
+    }
 
-      for (s_i_id = 1; s_i_id<=kItemCount; s_i_id++) {
-         s_quantity = makeNumber(10L, 100L);
-         makeAlphaString(24, 24, s_dist_01.data());
-         makeAlphaString(24, 24, s_dist_02.data());
-         makeAlphaString(24, 24, s_dist_03.data());
-         makeAlphaString(24, 24, s_dist_04.data());
-         makeAlphaString(24, 24, s_dist_05.data());
-         makeAlphaString(24, 24, s_dist_06.data());
-         makeAlphaString(24, 24, s_dist_07.data());
-         makeAlphaString(24, 24, s_dist_08.data());
-         makeAlphaString(24, 24, s_dist_09.data());
-         makeAlphaString(24, 24, s_dist_10.data());
-         uint32_t s_data_size = makeAlphaString(26, 50, s_data.data());
-         if (orig[s_i_id]) {
-            int64_t pos = makeNumber(0L, s_data_size - 8);
-            s_data[pos] = 'o';
-            s_data[pos + 1] = 'r';
-            s_data[pos + 2] = 'i';
-            s_data[pos + 3] = 'g';
-            s_data[pos + 4] = 'i';
-            s_data[pos + 5] = 'n';
-            s_data[pos + 6] = 'a';
-            s_data[pos + 7] = 'l';
-         }
+    for (int64_t i_id = 1; i_id <= kItemCount; i_id++) {
+        Record record;
 
-         // @formatter:off
-         s_csv << s_i_id << s_w_id << s_quantity << s_dist_01 << s_dist_02 << s_dist_03 << s_dist_04 << s_dist_05
-               << s_dist_06 << s_dist_07 << s_dist_08 << s_dist_09 << s_dist_10 << s_ytd << s_order_cnt
-               << s_remote_cnt << s_data << csv::endl;
-         // @formatter:on
-      }
-   }
+        // 填充item数据
+        record.push_back(static_cast<int64_t>(i_id));
+        record.push_back(static_cast<int64_t>(makeNumber(0, 10000)));             // i_im_id
+        record.push_back(makeAlphaStringAsString(14, 24));                        // i_name
+        record.push_back(static_cast<float>(makeNumber(100L, 10000L)) / 100.0f);  // i_price
 
-   cout << "ok !" << endl;
+        string i_data = makeAlphaStringAsString(26, 50);
+        if (orig[i_id - 1]) {  // 数组索引从0开始
+            if (i_data.length() >= 8) {
+                uint32_t pos = makeNumber(0L, i_data.length() - 8);
+                i_data.replace(pos, 8, "original");
+            }
+        }
+        record.push_back(i_data);  // i_data
+
+        writer_->writeRecord(record);
+    }
+
+    writer_->endTable();
+    cout << "ok !" << endl;
 }
 
-void TpccGenerator::generateOrdersAndOrderLines()
-{
-   cout << "Generating orders .. " << flush;
+void TpccGenerator::generateStock() {
+    cout << "Generating stocks .. " << flush;
 
-   int64_t o_id;
-   int64_t o_c_id;
-   int64_t o_d_id;
-   int64_t o_w_id;
-   int64_t o_carrier_id;
-   int64_t o_ol_cnt;
-   array<char, 15> o_entry_d = {}; // XXX not sure if date is generate correctly
-   int64_t o_all_local = 1;
+    vector<bool> orig(kItemCount, false);
 
-   int64_t ol_number;
-   int64_t ol_i_id;
-   int64_t ol_quantity;
-   float ol_amount;
-   array<char, 24> ol_dist_info = {};
-   string kNull = "null";
+    Schema schema = createStockSchema();
+    writer_->beginTable(schema);
 
-   csv::CsvWriter o_csv(folder + "/order.csv");
-   csv::CsvWriter ol_csv(folder + "/order_line.csv");
-   csv::CsvWriter no_csv(folder + "/new_order.csv");
+    for (int64_t s_w_id = 1; s_w_id <= warehouse_count_; s_w_id++) {
+        orig.assign(kItemCount, false);
 
-   // Generate ORD_PER_DIST (3000) orders and order line items for each district
-   for (o_w_id = 1L; o_w_id<=warehouse_count; o_w_id++) {
-      for (o_d_id = 1L; o_d_id<=kDistrictsPerWarehouse; o_d_id++) {
-         // Each customer has exactly one order
-         vector<uint32_t> customer_id_permutation = makePermutation(1, kCustomerPerDistrict + 1);
+        for (uint32_t i = 0; i < kItemCount / 10; i++) {
+            int64_t pos;
+            do {
+                pos = makeNumber(0L, kItemCount - 1);
+            } while (orig[pos]);
+            orig[pos] = 1;
+        }
 
-         for (o_id = 1; o_id<=OrdersPerDistrict; o_id++) {
-            o_c_id = customer_id_permutation[o_id - 1];
-            o_carrier_id = makeNumber(1L, 10L);
-            o_ol_cnt = makeNumber(5L, 15L);
-            makeNow(o_entry_d.data());
+        for (int64_t s_i_id = 1; s_i_id <= kItemCount; s_i_id++) {
+            Record record;
 
-            // @formatter:off
-            o_csv << o_id << o_d_id << o_w_id << o_c_id << o_entry_d << (o_id>2100 ? kNull : to_string(o_carrier_id))
-                  << o_ol_cnt << o_all_local << csv::endl;
-            // @formatter:on
+            // 填充stock数据
+            record.push_back(static_cast<int64_t>(s_i_id));
+            record.push_back(static_cast<int64_t>(s_w_id));
+            record.push_back(static_cast<int64_t>(makeNumber(10L, 100L)));  // s_quantity
 
-            // Order line items
-            for (ol_number = 1; ol_number<=o_ol_cnt; ol_number++) {
-               ol_i_id = makeNumber(1L, kItemCount);
-               ol_quantity = 5;
-               makeAlphaString(24, 24, ol_dist_info.data());
-
-               if (o_id>2100) {
-                  ol_amount = (float) (makeNumber(10L, 10000L)) / 100.0f;
-                  // @formatter:off
-                  ol_csv << o_id << o_d_id << o_w_id << ol_number << ol_i_id << o_w_id << kNull
-                         << ol_quantity << csv::Precision(2) << ol_amount << ol_dist_info << csv::endl;
-                  // @formatter:on
-               } else {
-                  ol_amount = 0.0f;
-                  // @formatter:off
-                  ol_csv << o_id << o_d_id << o_w_id << ol_number << ol_i_id << o_w_id
-                         << o_entry_d.data() << ol_quantity << csv::Precision(2) << ol_amount << ol_dist_info << csv::endl;
-                  // @formatter:on
-               }
+            // 生成s_dist_01到s_dist_10
+            for (int i = 0; i < 10; i++) {
+                record.push_back(makeAlphaStringAsString(24, 24));
             }
 
-            // Generate a new order entry for the order for the last 900 rows
-            if (o_id>2100) {
-               no_csv << o_id << o_d_id << o_w_id << csv::endl;
+            record.push_back(static_cast<int64_t>(0));  // s_ytd
+            record.push_back(static_cast<int64_t>(0));  // s_order_cnt
+            record.push_back(static_cast<int64_t>(0));  // s_remote_cnt
+
+            string s_data = makeAlphaStringAsString(26, 50);
+            if (orig[s_i_id - 1]) {  // 数组索引从0开始
+                if (s_data.length() >= 8) {
+                    int64_t pos = makeNumber(0L, s_data.length() - 8);
+                    s_data.replace(pos, 8, "original");
+                }
             }
-         }
-      }
-   }
+            record.push_back(s_data);  // s_data
 
-   cout << "ok !" << endl;
+            writer_->writeRecord(record);
+        }
+    }
+
+    writer_->endTable();
+    cout << "ok !" << endl;
 }
 
-uint32_t TpccGenerator::makeAlphaString(uint32_t min, uint32_t max, char *dest)
-{
-   const static char *possible_values = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+void TpccGenerator::generateOrdersAndOrderLines() {
+    cout << "Generating orders .. " << flush;
 
-   uint32_t len = makeNumber(min, max);
-   for (uint32_t i = 0; i<len; i++) {
-      dest[i] = possible_values[ranny() % 62];
-   }
-   if (len<max) {
-      dest[len] = '\0';
-   }
-   return len;
+    Schema ordersSchema = createOrdersSchema();
+    Schema orderLineSchema = createOrderLineSchema();
+    Schema newOrdersSchema = createNewOrdersSchema();
+
+    int64_t o_ol_cnt;
+
+
+    writer_->beginTable(ordersSchema);
+
+    // Generate ORD_PER_DIST (3000) orders and order line items for each district
+    for (int64_t o_w_id = 1L; o_w_id <= warehouse_count_; o_w_id++) {
+        for (int64_t o_d_id = 1L; o_d_id <= kDistrictsPerWarehouse; o_d_id++) {
+            // Each customer has exactly one order
+            vector<uint32_t> customer_id_permutation = makePermutation(1, kCustomerPerDistrict + 1);
+
+            for (int64_t o_id = 1; o_id <= OrdersPerDistrict; o_id++) {
+                o_ol_cnt = makeNumber(5L, 15L);
+
+                Record record;
+
+                // 填充order数据
+                record.push_back(static_cast<int64_t>(o_id));
+                record.push_back(static_cast<int64_t>(o_d_id));
+                record.push_back(static_cast<int64_t>(o_w_id));
+                record.push_back(static_cast<int64_t>(customer_id_permutation[o_id - 1]));
+                record.push_back(makeNowAsString());                                              // o_entry_d
+                record.push_back(static_cast<int64_t>((o_id > 2100) ? 0 : makeNumber(1L, 10L)));  // o_carrier_id，0表示null
+                record.push_back(static_cast<int64_t>(o_ol_cnt));                      // o_ol_cnt
+                record.push_back(static_cast<int64_t>(1));                                        // o_all_local
+
+                writer_->writeRecord(record);
+            }
+        }
+    }
+
+    writer_->endTable();
+
+    writer_->beginTable(orderLineSchema);
+
+    for (int64_t ol_w_id = 1L; ol_w_id <= warehouse_count_; ol_w_id++) {
+        for (int64_t ol_d_id = 1L; ol_d_id <= kDistrictsPerWarehouse; ol_d_id++) {
+            for (int64_t ol_o_id = 1; ol_o_id <= OrdersPerDistrict; ol_o_id++) {
+                int64_t ol_cnt = makeNumber(5L, 15L);
+
+                // Order line items
+                for (int64_t ol_number = 1; ol_number <= ol_cnt; ol_number++) {
+                    Record record;
+
+                    // 填充orderLine数据
+                    record.push_back(static_cast<int64_t>(ol_o_id));
+                    record.push_back(static_cast<int64_t>(ol_d_id));
+                    record.push_back(static_cast<int64_t>(ol_w_id));
+                    record.push_back(static_cast<int64_t>(ol_number));
+                    record.push_back(static_cast<int64_t>(makeNumber(1L, kItemCount)));  // ol_i_id
+                    record.push_back(static_cast<int64_t>(ol_w_id));                     // ol_supply_w_id
+
+                    if (ol_o_id > 2100) {
+                        record.push_back(string(""));  // ol_delivery_d (留空表示null)
+                    } else {
+                        record.push_back(makeNowAsString());  // ol_delivery_d
+                    }
+
+                    record.push_back(static_cast<int64_t>(5));  // ol_quantity
+
+                    if (ol_o_id > 2100) {
+                        record.push_back(static_cast<float>(makeNumber(10L, 10000L)) / 100.0f);  // ol_amount
+                    } else {
+                        record.push_back(0.0f);  // ol_amount
+                    }
+
+                    record.push_back(makeAlphaStringAsString(24, 24));  // ol_dist_info
+
+                    writer_->writeRecord(record);
+                }
+            }
+        }
+    }
+
+    writer_->endTable();
+
+    writer_->beginTable(newOrdersSchema);
+
+    for (int64_t no_w_id = 1L; no_w_id <= warehouse_count_; no_w_id++) {
+        for (int64_t no_d_id = 1L; no_d_id <= kDistrictsPerWarehouse; no_d_id++) {
+            for (int64_t no_o_id = 2101; no_o_id <= OrdersPerDistrict; no_o_id++) {
+                Record record;
+
+                // 填充newOrder数据
+                record.push_back(static_cast<int64_t>(no_o_id));
+                record.push_back(static_cast<int64_t>(no_d_id));
+                record.push_back(static_cast<int64_t>(no_w_id));
+
+                writer_->writeRecord(record);
+            }
+        }
+    }
+
+    writer_->endTable();
+    cout << "ok !" << endl;
 }
 
-uint32_t TpccGenerator::makeNumberString(uint32_t min, uint32_t max, char *dest)
-{
-   const static char *possible_values = "0123456789";
+// 以下是数据生成的辅助方法，保持原有逻辑不变
+uint32_t TpccGenerator::makeAlphaString(uint32_t min, uint32_t max, char *dest) {
+    const static char *possible_values = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-   uint32_t len = makeNumber(min, max);
-   for (uint32_t i = 0; i<len; i++) {
-      dest[i] = possible_values[ranny() % 10];
-   }
-   if (len<max) {
-      dest[len] = '\0';
-   }
-   return len;
+    uint32_t len = makeNumber(min, max);
+    for (uint32_t i = 0; i < len; i++) {
+        dest[i] = possible_values[ranny_() % 62];
+    }
+    if (len < max) {
+        dest[len] = '\0';
+    }
+    return len;
 }
 
-void TpccGenerator::makeAddress(char *street1, char *street2, char *city, char *state, char *zip)
-{
-   makeAlphaString(10, 20, street1);
-   makeAlphaString(10, 20, street2);
-   makeAlphaString(10, 20, city);
-   makeAlphaString(2, 2, state);
-   makeNumberString(9, 9, zip); // XXX
+uint32_t TpccGenerator::makeNumberString(uint32_t min, uint32_t max, char *dest) {
+    const static char *possible_values = "0123456789";
+
+    uint32_t len = makeNumber(min, max);
+    for (uint32_t i = 0; i < len; i++) {
+        dest[i] = possible_values[ranny_() % 10];
+    }
+    if (len < max) {
+        dest[len] = '\0';
+    }
+    return len;
 }
 
-uint32_t TpccGenerator::makeNumber(uint32_t min, uint32_t max)
-{
-   return ranny() % (max - min + 1) + min;
+void TpccGenerator::makeAddress(char *street1, char *street2, char *city, char *state, char *zip) {
+    makeAlphaString(10, 20, street1);
+    makeAlphaString(10, 20, street2);
+    makeAlphaString(10, 20, city);
+    makeAlphaString(2, 2, state);
+    makeNumberString(9, 9, zip);  // XXX
 }
 
-uint32_t TpccGenerator::makeNonUniformRandom(uint32_t A, uint32_t x, uint32_t y)
-{
-   return ((makeNumber(0, A) | makeNumber(x, y)) + 42) % (y - x + 1) + x; // XXX
+uint32_t TpccGenerator::makeNumber(uint32_t min, uint32_t max) {
+    return ranny_() % (max - min + 1) + min;
 }
 
-vector<uint32_t> TpccGenerator::makePermutation(uint32_t min, uint32_t max)
-{
-   assert(max>min);
-   const uint32_t count = max - min;
-   vector<uint32_t> result(count);
-   iota(result.begin(), result.end(), min);
-
-   for (uint32_t i = 0; i<count; i++) {
-      swap(result[i], result[ranny() % count]);
-   }
-   return result;
+uint32_t TpccGenerator::makeNonUniformRandom(uint32_t A, uint32_t x, uint32_t y) {
+    return ((makeNumber(0, A) | makeNumber(x, y)) + 42) % (y - x + 1) + x;  // XXX
 }
 
-void TpccGenerator::makeLastName(int64_t num, char *name)
-{
-   static const char *n[] = {"BAR", "OUGHT", "ABLE", "PRI", "PRES", "ESE", "ANTI", "CALLY", "ATION", "EING"};
-   strcpy(name, n[num / 100]);
-   strcat(name, n[(num / 10) % 10]);
-   strcat(name, n[num % 10]);
+vector<uint32_t> TpccGenerator::makePermutation(uint32_t min, uint32_t max) {
+    assert(max > min);
+    const uint32_t count = max - min;
+    vector<uint32_t> result(count);
+    iota(result.begin(), result.end(), min);
+
+    for (uint32_t i = 0; i < count; i++) {
+        swap(result[i], result[ranny_() % count]);
+    }
+    return result;
 }
 
-void TpccGenerator::makeNow(char *str)
-{
-   string s = to_string(chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now().time_since_epoch()).count()); // XXX
-   strncpy(str, s.data(), s.size());
+void TpccGenerator::makeLastName(int64_t num, char *name) {
+    static const char *n[] = {"BAR", "OUGHT", "ABLE", "PRI", "PRES", "ESE", "ANTI", "CALLY", "ATION", "EING"};
+    strcpy(name, n[num / 100]);
+    strcat(name, n[(num / 10) % 10]);
+    strcat(name, n[num % 10]);
 }
+
+void TpccGenerator::makeNow(char *str) {
+    string s = to_string(chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now().time_since_epoch()).count());  // XXX
+    strncpy(str, s.data(), s.size());
+}
+
+}  // namespace tpcc

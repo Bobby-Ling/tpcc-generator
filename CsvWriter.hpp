@@ -1,36 +1,29 @@
 #pragma once
 
-#include <iostream>
-#include <array>
+#include "Writer.hpp"
 #include <fstream>
 
-namespace csv {
+namespace tpcc {
 
-struct Precision {
-   Precision(int p)
-           : p(p) {}
-   int p;
-};
+class CsvWriter : public Writer {
+private:
+    std::ofstream out_;
+    bool first_word_in_line_;
+    const Schema* current_schema_;  // 当前表的Schema
 
-static struct EndlStruct { // Not std way to it but really easy for here.
-} endl;
+    // 辅助方法：打印前的预处理（添加逗号）
+    void prePrint();
 
-class CsvWriter {
-   std::ofstream out;
-   bool firstWordInLine;
+    // 辅助方法：写入一个值
+    void writeValue(const Value& value, ColumnType expected_type);
 
-   void prePrint();
-   CsvWriter &printString(const char *str, int len);
 public:
-   CsvWriter(const std::string &path);
+    CsvWriter(const std::string& output_path);
 
-   friend CsvWriter &operator<<(CsvWriter &csv, int64_t num);
-   friend CsvWriter &operator<<(CsvWriter &csv, float num);
-   template<unsigned long len>
-   friend CsvWriter &operator<<(CsvWriter &csv, const std::array<char, len> &data) { return csv.printString(data.data(), len); }
-   friend CsvWriter &operator<<(CsvWriter &csv, const std::string &str);
-   friend CsvWriter &operator<<(CsvWriter &csv, EndlStruct);
-   friend CsvWriter &operator<<(CsvWriter &csv, Precision);
+    // 实现Writer接口
+    void beginTable(const Schema& schema) override;
+    void writeRecord(const Record& record) override;
+    void endTable() override;
 };
 
-}
+} // namespace tpcc
