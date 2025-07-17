@@ -7,21 +7,19 @@ namespace tpcc {
 
 // 写入器基类
 class Writer {
+  protected:
+    virtual void beginTable() = 0;
+    virtual void endTable() = 0;
+
   public:
-    Writer(const std::string &output_path) : output_path_(output_path) {}
+    Writer(const std::string &output_path, Schema &schema) : output_path_(output_path), schema_(schema) {}
     virtual ~Writer() = default;
 
-    // 开始新表的写入
-    virtual void beginTable(const Schema &schema) = 0;
-
-    // 写入一条记录
     virtual void writeRecord(const Record &record) = 0;
-
-    // 结束表写入
-    virtual void endTable() = 0;
 
   protected:
     std::string output_path_;
+    Schema schema_;
 };
 
 // 用于支持精度控制

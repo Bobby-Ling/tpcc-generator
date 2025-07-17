@@ -4,14 +4,9 @@
 
 namespace tpcc {
 
-CsvWriter::CsvWriter(const std::string& output_path)
-    : Writer(output_path), first_word_in_line_(true), current_schema_(nullptr) {
-}
-
-void CsvWriter::beginTable(const Schema& schema) {
-    current_schema_ = &schema;
+void CsvWriter::beginTable() {
     // 组合完整的文件路径
-    std::string file_path = output_path_ + "/" + schema.getTableName() + ".csv";
+    std::string file_path = output_path_ + "/" + schema_.getTableName() + ".csv";
     out_.open(file_path);
     if (!out_.good()) {
         std::cout << "\nOh no, I can not create file: '" << file_path << "'." << std::endl;
@@ -26,7 +21,6 @@ void CsvWriter::endTable() {
         out_.close();
     }
     first_word_in_line_ = true;
-    current_schema_ = nullptr;
 }
 
 void CsvWriter::prePrint() {
@@ -55,12 +49,7 @@ void CsvWriter::writeValue(const Value& value, ColumnType expected_type) {
 }
 
 void CsvWriter::writeRecord(const Record& record) {
-    if (!current_schema_) {
-        std::cout << "Error: No schema set for writing record" << std::endl;
-        return;
-    }
-
-    const auto& columns = current_schema_->getColumns();
+    const auto& columns = schema_.getColumns();
     if (record.size() != columns.size()) {
         std::cout << "Error: Record size (" << record.size()
                   << ") doesn't match schema column count (" << columns.size() << ")" << std::endl;

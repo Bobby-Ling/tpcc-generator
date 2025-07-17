@@ -21,7 +21,8 @@ class TpccGenerator {
     static_assert(kCustomerPerDistrict == OrdersPerDistrict, "These should match, see comment.");
 
     const int64_t warehouse_count_;
-    std::unique_ptr<Writer> writer_;
+    const std::string output_path_;
+    const std::string format_;
 
     std::mt19937 ranny_;
 
@@ -50,8 +51,11 @@ class TpccGenerator {
     std::string makeNumberStringAsString(uint32_t min, uint32_t max);
     std::string makeNowAsString();
 
+    std::unique_ptr<Writer> createWriter(Schema &schema);
+
   public:
-    TpccGenerator(int64_t warehouse_count, std::unique_ptr<Writer> writer);
+    TpccGenerator(int64_t warehouse_count, std::string output_path, std::string format)
+      :warehouse_count_(warehouse_count), output_path_(output_path), format_(format), ranny_(42) {}
 
     void setRandomSeed(uint32_t seed) { ranny_.seed(seed); }
 

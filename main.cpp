@@ -1,9 +1,5 @@
 #include "TpccGenerator.hpp"
-#include "CsvWriter.hpp"
-#include "SqlWriter.hpp"
-
 #include <iostream>
-#include <memory>
 #include <filesystem>
 
 using namespace std;
@@ -32,23 +28,8 @@ int main(int argc, char **argv) {
         filesystem::create_directories(output_path);
     }
 
-
-    // 创建对应的Writer
-    unique_ptr<Writer> writer;
-    if (format == "csv") {
-        writer = make_unique<CsvWriter>(output_path);
-        cout << "Using CSV format" << endl;
-    } else if (format == "sql") {
-        writer = make_unique<SqlWriter>(output_path);
-        cout << "Using SQL format" << endl;
-    } else {
-        cout << "ERROR: Unsupported format '" << format << "'. Supported formats: csv, sql" << endl;
-        cout << "Usage: " << argv[0] << " <warehouse_count> <output_path> <format(csv|sql)>" << endl;
-        return -1;
-    }
-
     // Generate tpcc data
-    TpccGenerator generator((uint32_t) warehouse_count, std::move(writer));
+    TpccGenerator generator((uint32_t) warehouse_count, output_path, format);
 
     cout << "I am loading TPCC data for " << warehouse_count << " warehouse"
          << (warehouse_count != 1 ? "s" : "") << ", hold on .." << endl << endl;

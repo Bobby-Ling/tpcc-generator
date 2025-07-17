@@ -1,6 +1,7 @@
 #include "TpccGenerator.hpp"
+#include "CsvWriter.hpp"
+#include "SqlWriter.hpp"
 #include <algorithm>
-#include <array>
 #include <cassert>
 #include <chrono>
 #include <cstdint>
@@ -12,8 +13,13 @@ namespace tpcc {
 
 using namespace std;
 
-TpccGenerator::TpccGenerator(int64_t warehouse_count, std::unique_ptr<Writer> writer)
-    : warehouse_count_(warehouse_count), writer_(std::move(writer)), ranny_(42) {
+std::unique_ptr<Writer> TpccGenerator::createWriter(Schema &schema) {
+    if (format_ == "csv") {
+        return make_unique<CsvWriter>(output_path_, schema);
+    } else if (format_ == "sql") {
+        return make_unique<SqlWriter>(output_path_, schema);
+    }
+    throw std::runtime_error("Unsupported format: " + format_);
 }
 
 // Schema创建方法
@@ -190,8 +196,8 @@ void TpccGenerator::generateWarehouses() {
     cout << "Generating warehouse .. " << flush;
 
     Schema schema = createWarehouseSchema();
-    std::unique_ptr<Writer> writer_;
-    writer_->beginTable(schema);
+
+    auto warehouseWriter = createWriter(schema);
 
     for (int64_t w_id = 1; w_id <= warehouse_count_; w_id++) {
         Record record;
@@ -210,10 +216,9 @@ void TpccGenerator::generateWarehouses() {
         record.push_back(static_cast<float>(makeNumber(10L, 20L)) / 100.0f);  // w_tax
         record.push_back(3000000.00f);                                        // w_ytd
 
-        writer_->writeRecord(record);
+        warehouseWriter->writeRecord(record);
     }
 
-    writer_->endTable();
     cout << "ok !" << endl;
 }
 
@@ -221,7 +226,7 @@ void TpccGenerator::generateDistricts() {
     cout << "Generating districts .. " << flush;
 
     Schema schema = createDistrictSchema();
-    writer_->beginTable(schema);
+    auto districtWriter = createWriter(schema);
 
     // Each warehouse has DIST_PER_WARE (10) districts
     for (int64_t d_w_id = 1; d_w_id <= warehouse_count_; d_w_id++) {
@@ -244,11 +249,10 @@ void TpccGenerator::generateDistricts() {
             record.push_back(30000.0f);                                           // d_ytd
             record.push_back(static_cast<int64_t>(3001));                         // d_next_o_id
 
-            writer_->writeRecord(record);
+            districtWriter->writeRecord(record);
         }
     }
 
-    writer_->endTable();
     cout << "ok !" << endl;
 }
 
@@ -257,7 +261,7 @@ void TpccGenerator::generateCustomerAndHistory() {
 
     // 生成customer数据
     Schema customerSchema = createCustomerSchema();
-    writer_->beginTable(customerSchema);
+    auto customerWriter = createWriter(customerSchema);
 
     // Each warehouse has DIST_PER_WARE (10) districts
     for (int64_t c_w_id = 1; c_w_id <= warehouse_count_; c_w_id++) {
@@ -303,16 +307,14 @@ void TpccGenerator::generateCustomerAndHistory() {
                 record.push_back(static_cast<int64_t>(0));                           // c_delivery_cnt
                 record.push_back(makeAlphaStringAsString(300, 300));                 // c_data
 
-                writer_->writeRecord(record);
+                customerWriter->writeRecord(record);
             }
         }
     }
 
-    writer_->endTable();
-
     // 生成history数据
     Schema historySchema = createHistorySchema();
-    writer_->beginTable(historySchema);
+    auto historyWriter = createWriter(historySchema);
 
     for (int64_t h_c_w_id = 1; h_c_w_id <= warehouse_count_; h_c_w_id++) {
         for (int64_t h_c_d_id = 1; h_c_d_id <= kDistrictsPerWarehouse; h_c_d_id++) {
@@ -329,12 +331,11 @@ void TpccGenerator::generateCustomerAndHistory() {
                 record.push_back(10.0f);                            // h_amount
                 record.push_back(makeAlphaStringAsString(12, 24));  // h_data
 
-                writer_->writeRecord(record);
+                historyWriter->writeRecord(record);
             }
         }
     }
 
-    writer_->endTable();
     cout << "ok !" << endl;
 }
 
@@ -344,7 +345,7 @@ void TpccGenerator::generateItems() {
     vector<bool> orig(kItemCount, false);
 
     Schema schema = createItemSchema();
-    writer_->beginTable(schema);
+    auto itemWriter = createWriter(schema);
 
     for (uint32_t i = 0; i < kItemCount / 10; i++) {
         uint32_t pos;
@@ -372,10 +373,9 @@ void TpccGenerator::generateItems() {
         }
         record.push_back(i_data);  // i_data
 
-        writer_->writeRecord(record);
+        itemWriter->writeRecord(record);
     }
 
-    writer_->endTable();
     cout << "ok !" << endl;
 }
 
@@ -385,7 +385,7 @@ void TpccGenerator::generateStock() {
     vector<bool> orig(kItemCount, false);
 
     Schema schema = createStockSchema();
-    writer_->beginTable(schema);
+    auto stockWriter = createWriter(schema);
 
     for (int64_t s_w_id = 1; s_w_id <= warehouse_count_; s_w_id++) {
         orig.assign(kItemCount, false);
@@ -424,11 +424,10 @@ void TpccGenerator::generateStock() {
             }
             record.push_back(s_data);  // s_data
 
-            writer_->writeRecord(record);
+            stockWriter->writeRecord(record);
         }
     }
 
-    writer_->endTable();
     cout << "ok !" << endl;
 }
 
@@ -439,10 +438,9 @@ void TpccGenerator::generateOrdersAndOrderLines() {
     Schema orderLineSchema = createOrderLineSchema();
     Schema newOrdersSchema = createNewOrdersSchema();
 
-    int64_t o_ol_cnt;
-
-
-    writer_->beginTable(ordersSchema);
+    auto ordersWriter = createWriter(ordersSchema);
+    auto orderLineWriter = createWriter(orderLineSchema);
+    auto newOrdersWriter = createWriter(newOrdersSchema);
 
     // Generate ORD_PER_DIST (3000) orders and order line items for each district
     for (int64_t o_w_id = 1L; o_w_id <= warehouse_count_; o_w_id++) {
@@ -451,10 +449,9 @@ void TpccGenerator::generateOrdersAndOrderLines() {
             vector<uint32_t> customer_id_permutation = makePermutation(1, kCustomerPerDistrict + 1);
 
             for (int64_t o_id = 1; o_id <= OrdersPerDistrict; o_id++) {
-                o_ol_cnt = makeNumber(5L, 15L);
+                int64_t o_ol_cnt = makeNumber(5L, 15L);
 
                 Record record;
-
                 // 填充order数据
                 record.push_back(static_cast<int64_t>(o_id));
                 record.push_back(static_cast<int64_t>(o_d_id));
@@ -465,74 +462,66 @@ void TpccGenerator::generateOrdersAndOrderLines() {
                 record.push_back(static_cast<int64_t>(o_ol_cnt));                      // o_ol_cnt
                 record.push_back(static_cast<int64_t>(1));                                        // o_all_local
 
-                writer_->writeRecord(record);
-            }
-        }
-    }
-
-    writer_->endTable();
-
-    writer_->beginTable(orderLineSchema);
-
-    for (int64_t ol_w_id = 1L; ol_w_id <= warehouse_count_; ol_w_id++) {
-        for (int64_t ol_d_id = 1L; ol_d_id <= kDistrictsPerWarehouse; ol_d_id++) {
-            for (int64_t ol_o_id = 1; ol_o_id <= OrdersPerDistrict; ol_o_id++) {
-                int64_t ol_cnt = makeNumber(5L, 15L);
+                ordersWriter->writeRecord(record);
 
                 // Order line items
-                for (int64_t ol_number = 1; ol_number <= ol_cnt; ol_number++) {
-                    Record record;
+                for (int64_t ol_number = 1; ol_number <= o_ol_cnt; ol_number++) {
+                    int64_t ol_i_id = makeNumber(1L, kItemCount);
+                    int64_t ol_quantity = 5;
+                    string ol_dist_info = makeAlphaStringAsString(24, 24);
+                    float ol_amount;
 
-                    // 填充orderLine数据
-                    record.push_back(static_cast<int64_t>(ol_o_id));
-                    record.push_back(static_cast<int64_t>(ol_d_id));
-                    record.push_back(static_cast<int64_t>(ol_w_id));
-                    record.push_back(static_cast<int64_t>(ol_number));
-                    record.push_back(static_cast<int64_t>(makeNumber(1L, kItemCount)));  // ol_i_id
-                    record.push_back(static_cast<int64_t>(ol_w_id));                     // ol_supply_w_id
-
-                    if (ol_o_id > 2100) {
-                        record.push_back(string(""));  // ol_delivery_d (留空表示null)
+                    Record ol_record;
+                    if (o_id > 2100) {
+                        ol_amount = (float)(makeNumber(10L, 10000L)) / 100.0f;
+                        // // @formatter:off
+                        // ol_csv << o_id << o_d_id << o_w_id << ol_number << ol_i_id << o_w_id << kNull
+                        //        << ol_quantity << csv::Precision(2) << ol_amount << ol_dist_info << csv::endl;
+                        // // @formatter:on
+                        ol_record.push_back(static_cast<int64_t>(o_id));
+                        ol_record.push_back(static_cast<int64_t>(o_d_id));
+                        ol_record.push_back(static_cast<int64_t>(o_w_id));
+                        ol_record.push_back(static_cast<int64_t>(ol_number));
+                        ol_record.push_back(static_cast<int64_t>(ol_i_id));
+                        ol_record.push_back(static_cast<int64_t>(o_w_id));
+                        ol_record.push_back(string(""));
+                        ol_record.push_back(static_cast<int64_t>(ol_quantity));
+                        ol_record.push_back(static_cast<float>(ol_amount));
+                        ol_record.push_back(ol_dist_info);
                     } else {
-                        record.push_back(makeNowAsString());  // ol_delivery_d
+                        ol_amount = 0.0f;
+                        // // @formatter:off
+                        // ol_csv << o_id << o_d_id << o_w_id << ol_number << ol_i_id << o_w_id
+                        //        << o_entry_d.data() << ol_quantity << csv::Precision(2) << ol_amount << ol_dist_info << csv::endl;
+                        // // @formatter:on
+                        ol_record.push_back(static_cast<int64_t>(o_id));
+                        ol_record.push_back(static_cast<int64_t>(o_d_id));
+                        ol_record.push_back(static_cast<int64_t>(o_w_id));
+                        ol_record.push_back(static_cast<int64_t>(ol_number));
+                        ol_record.push_back(static_cast<int64_t>(ol_i_id));
+                        ol_record.push_back(static_cast<int64_t>(o_w_id));
+                        ol_record.push_back(makeNowAsString());
+                        ol_record.push_back(static_cast<int64_t>(ol_quantity));
+                        ol_record.push_back(static_cast<float>(ol_amount));
+                        ol_record.push_back(ol_dist_info);
                     }
-
-                    record.push_back(static_cast<int64_t>(5));  // ol_quantity
-
-                    if (ol_o_id > 2100) {
-                        record.push_back(static_cast<float>(makeNumber(10L, 10000L)) / 100.0f);  // ol_amount
-                    } else {
-                        record.push_back(0.0f);  // ol_amount
-                    }
-
-                    record.push_back(makeAlphaStringAsString(24, 24));  // ol_dist_info
-
-                    writer_->writeRecord(record);
+                    orderLineWriter->writeRecord(ol_record);
                 }
+
+                // Generate a new order entry for the order for the last 900 rows
+                if (o_id > 2100) {
+                    // no_csv << o_id << o_d_id << o_w_id << csv::endl;
+                    Record record;
+                    record.push_back(static_cast<int64_t>(o_id));
+                    record.push_back(static_cast<int64_t>(o_d_id));
+                    record.push_back(static_cast<int64_t>(o_w_id));
+                    newOrdersWriter->writeRecord(record);
+                }
+
             }
         }
     }
 
-    writer_->endTable();
-
-    writer_->beginTable(newOrdersSchema);
-
-    for (int64_t no_w_id = 1L; no_w_id <= warehouse_count_; no_w_id++) {
-        for (int64_t no_d_id = 1L; no_d_id <= kDistrictsPerWarehouse; no_d_id++) {
-            for (int64_t no_o_id = 2101; no_o_id <= OrdersPerDistrict; no_o_id++) {
-                Record record;
-
-                // 填充newOrder数据
-                record.push_back(static_cast<int64_t>(no_o_id));
-                record.push_back(static_cast<int64_t>(no_d_id));
-                record.push_back(static_cast<int64_t>(no_w_id));
-
-                writer_->writeRecord(record);
-            }
-        }
-    }
-
-    writer_->endTable();
     cout << "ok !" << endl;
 }
 

@@ -5,14 +5,9 @@
 
 namespace tpcc {
 
-SqlWriter::SqlWriter(const std::string& output_path)
-    : Writer(output_path), current_schema_(nullptr) {
-}
-
-void SqlWriter::beginTable(const Schema& schema) {
-    current_schema_ = &schema;
+void SqlWriter::beginTable() {
     // 组合完整的文件路径
-    std::string file_path = output_path_ + "/" + schema.getTableName() + ".sql";
+    std::string file_path = output_path_ + "/" + schema_.getTableName() + ".sql";
     out_.open(file_path);
     if (!out_.good()) {
         std::cout << "\nOh no, I can not create file: '" << file_path << "'." << std::endl;
@@ -25,7 +20,6 @@ void SqlWriter::endTable() {
     if (out_.is_open()) {
         out_.close();
     }
-    current_schema_ = nullptr;
 }
 
 std::string SqlWriter::escapeSqlString(const std::string& str) {
@@ -61,12 +55,7 @@ std::string SqlWriter::formatValue(const Value& value, ColumnType expected_type)
 }
 
 void SqlWriter::writeRecord(const Record& record) {
-    if (!current_schema_) {
-        std::cout << "Error: No schema set for writing record" << std::endl;
-        return;
-    }
-
-    const auto& columns = current_schema_->getColumns();
+    const auto& columns = schema_.getColumns();
     if (record.size() != columns.size()) {
         std::cout << "Error: Record size (" << record.size()
                   << ") doesn't match schema column count (" << columns.size() << ")" << std::endl;
@@ -74,7 +63,7 @@ void SqlWriter::writeRecord(const Record& record) {
     }
 
     // 生成INSERT语句
-    out_ << "INSERT INTO " << current_schema_->getTableName() << " VALUES (";
+    out_ << "INSERT INTO " << schema_.getTableName() << " VALUES (";
 
     for (size_t i = 0; i < record.size(); ++i) {
         if (i > 0) out_ << ", ";
