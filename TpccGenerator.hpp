@@ -46,6 +46,8 @@ class TpccGenerator {
     void makeLastName(int64_t num, char *name);
     void makeNow(char *str);
 
+    void makeAddress(std::string &street1, std::string &street2, std::string &city, std::string &state, std::string &zip);
+
     // 生成固定长度的字符串
     std::string makeAlphaStringAsString(uint32_t min, uint32_t max);
     std::string makeNumberStringAsString(uint32_t min, uint32_t max);

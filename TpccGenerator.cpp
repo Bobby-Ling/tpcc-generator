@@ -263,75 +263,90 @@ void TpccGenerator::generateCustomerAndHistory() {
     Schema customerSchema = createCustomerSchema();
     auto customerWriter = createWriter(customerSchema);
 
-    // Each warehouse has DIST_PER_WARE (10) districts
-    for (int64_t c_w_id = 1; c_w_id <= warehouse_count_; c_w_id++) {
-        for (int64_t c_d_id = 1; c_d_id <= kDistrictsPerWarehouse; c_d_id++) {
-            for (int64_t c_id = 1; c_id <= kCustomerPerDistrict; c_id++) {
-                Record record;
-
-                // 填充customer数据
-                record.push_back(static_cast<int64_t>(c_id));
-                record.push_back(static_cast<int64_t>(c_d_id));
-                record.push_back(static_cast<int64_t>(c_w_id));
-                record.push_back(makeAlphaStringAsString(8, 16));  // c_first
-                record.push_back(string("OE"));                    // c_middle
-
-                // 生成last name
-                string lastName;
-                if (c_id <= 1000) {
-                    char nameBuffer[32];
-                    makeLastName(c_id - 1, nameBuffer);
-                    lastName = string(nameBuffer);
-                } else {
-                    char nameBuffer[32];
-                    makeLastName(makeNonUniformRandom(255, 0, 999), nameBuffer);
-                    lastName = string(nameBuffer);
-                }
-                record.push_back(lastName);  // c_last
-
-                // 生成地址信息
-                record.push_back(makeAlphaStringAsString(10, 20));  // c_street_1
-                record.push_back(makeAlphaStringAsString(10, 20));  // c_street_2
-                record.push_back(makeAlphaStringAsString(10, 20));  // c_city
-                record.push_back(makeAlphaStringAsString(2, 2));    // c_state
-                record.push_back(makeNumberStringAsString(9, 9));   // c_zip
-
-                record.push_back(makeNumberStringAsString(16, 16));                  // c_phone
-                record.push_back(makeNowAsString());                                 // c_since
-                record.push_back(string(makeNumber(0L, 1L) == 0 ? "GC" : "BC"));     // c_credit
-                record.push_back(50000.0f);                                          // c_credit_lim
-                record.push_back(static_cast<float>(makeNumber(0L, 50L)) / 100.0f);  // c_discount
-                record.push_back(-10.0f);                                            // c_balance
-                record.push_back(10.0f);                                             // c_ytd_payment
-                record.push_back(static_cast<int64_t>(1));                           // c_payment_cnt
-                record.push_back(static_cast<int64_t>(0));                           // c_delivery_cnt
-                record.push_back(makeAlphaStringAsString(300, 300));                 // c_data
-
-                customerWriter->writeRecord(record);
-            }
-        }
-    }
-
     // 生成history数据
     Schema historySchema = createHistorySchema();
     auto historyWriter = createWriter(historySchema);
 
-    for (int64_t h_c_w_id = 1; h_c_w_id <= warehouse_count_; h_c_w_id++) {
-        for (int64_t h_c_d_id = 1; h_c_d_id <= kDistrictsPerWarehouse; h_c_d_id++) {
-            for (int64_t h_c_id = 1; h_c_id <= kCustomerPerDistrict; h_c_id++) {
+    // Each warehouse has DIST_PER_WARE (10) districts
+    for (int64_t c_w_id = 1; c_w_id <= warehouse_count_; c_w_id++) {
+        for (int64_t c_d_id = 1; c_d_id <= kDistrictsPerWarehouse; c_d_id++) {
+            for (int64_t c_id = 1; c_id <= kCustomerPerDistrict; c_id++) {
+                std::string c_first = makeAlphaStringAsString(8, 16);
+                std::string c_middle = string("OE");
+                std::string c_last;
+                if (c_id <= 1000) {
+                    char nameBuffer[32];
+                    makeLastName(c_id - 1, nameBuffer);
+                    c_last = string(nameBuffer);
+                } else {
+                    char nameBuffer[32];
+                    makeLastName(makeNonUniformRandom(255, 0, 999), nameBuffer);
+                    c_last = string(nameBuffer);
+                }
+                std::string c_street_1, c_street_2, c_city, c_state, c_zip;
+                makeAddress(c_street_1, c_street_2, c_city, c_state, c_zip);
+                std::string c_phone = makeNumberStringAsString(16, 16);
+                std::string c_credit = makeNumber(0L, 1L) == 0 ? "GC" : "BC";
+                float c_credit_lim = 50000;
+                float c_discount = ((float) makeNumber(0L, 50L)) / 100.0f;
+                float c_balance = -10.0f;
+                std::string c_since = makeNowAsString();
+                std::string c_data = makeAlphaStringAsString(300, 500);
+
+                // // @formatter:off
+                // c_csv << c_id << c_d_id << c_w_id << c_first << c_middle << c_last << c_street_1 << c_street_2 << c_city
+                //     << c_state << c_zip << c_phone << c_since << c_credit << csv::Precision(2) << c_credit_lim
+                //     << csv::Precision(4) << c_discount << csv::Precision(2) << c_balance << 10.0f << int64_t(1)
+                //     << int64_t(0) << c_data << csv::endl;
+                // // @formatter:on
                 Record record;
+                // 填充customer数据
+                record.push_back(static_cast<int64_t>(c_id));
+                record.push_back(static_cast<int64_t>(c_d_id));
+                record.push_back(static_cast<int64_t>(c_w_id));
+                record.push_back(c_first);  // c_first
+                record.push_back(c_middle);                    // c_middle
+                record.push_back(c_last);  // c_last
+                record.push_back(c_street_1);  // c_street_1
+                record.push_back(c_street_2);  // c_street_2
+                record.push_back(c_city);  // c_city
+                record.push_back(c_state);  // c_state
+                record.push_back(c_zip);  // c_zip
+                record.push_back(c_phone);  // c_phone
+                record.push_back(c_since);  // c_since
+                record.push_back(c_credit);  // c_credit
+                record.push_back(static_cast<float>(c_credit_lim));  // c_credit_lim
+                record.push_back(static_cast<float>(c_discount));  // c_discount
+                record.push_back(static_cast<float>(c_balance));  // c_balance
+                record.push_back(static_cast<float>(10.0f));  // 10.0f
+                record.push_back(static_cast<int64_t>(1));  // 1
+                record.push_back(static_cast<int64_t>(0));  // 0
+                record.push_back(c_data);  // c_data
+
+                customerWriter->writeRecord(record);
 
                 // 填充history数据
-                record.push_back(static_cast<int64_t>(h_c_id));
-                record.push_back(static_cast<int64_t>(h_c_d_id));
-                record.push_back(static_cast<int64_t>(h_c_w_id));
-                record.push_back(static_cast<int64_t>(h_c_d_id));
-                record.push_back(static_cast<int64_t>(h_c_w_id));
-                record.push_back(makeNowAsString());                // h_datetime
-                record.push_back(10.0f);                            // h_amount
-                record.push_back(makeAlphaStringAsString(12, 24));  // h_data
+                // h_amount = 10.0;
+                // makeAlphaString(12, 24, h_data.data());
 
-                historyWriter->writeRecord(record);
+                // // @formatter:off
+                // h_csv << c_id << c_d_id << c_w_id << c_d_id << c_w_id << c_since << h_amount << h_data << csv::endl;
+                // // @formatter:on
+
+                std::string h_data = makeAlphaStringAsString(12, 24);
+                float h_amount = 10.0f;
+
+                Record h_record;
+                h_record.push_back(static_cast<int64_t>(c_id));
+                h_record.push_back(static_cast<int64_t>(c_d_id));
+                h_record.push_back(static_cast<int64_t>(c_w_id));
+                h_record.push_back(static_cast<int64_t>(c_d_id));
+                h_record.push_back(static_cast<int64_t>(c_w_id));
+                h_record.push_back(c_since);
+                h_record.push_back(static_cast<float>(h_amount));
+                h_record.push_back(h_data);
+
+                historyWriter->writeRecord(h_record);
             }
         }
     }
@@ -558,6 +573,14 @@ void TpccGenerator::makeAddress(char *street1, char *street2, char *city, char *
     makeAlphaString(10, 20, city);
     makeAlphaString(2, 2, state);
     makeNumberString(9, 9, zip);  // XXX
+}
+
+void TpccGenerator::makeAddress(std::string &street1, std::string &street2, std::string &city, std::string &state, std::string &zip) {
+    street1 = makeAlphaStringAsString(10, 20);
+    street2 = makeAlphaStringAsString(10, 20);
+    city = makeAlphaStringAsString(10, 20);
+    state = makeAlphaStringAsString(2, 2);
+    zip = makeNumberStringAsString(9, 9);
 }
 
 uint32_t TpccGenerator::makeNumber(uint32_t min, uint32_t max) {
