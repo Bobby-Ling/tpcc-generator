@@ -1,11 +1,14 @@
 #include "TpccGenerator.hpp"
 #include <iostream>
 #include <filesystem>
+#include "log.h"
 
 using namespace std;
 using namespace tpcc;
 
 int main(int argc, char **argv) {
+    init_logger();
+
     // Check input
     if (argc != 4) {
         cout << "Usage: " << argv[0] << " <warehouse_count> <output_path> <format(csv|sql)>" << endl;

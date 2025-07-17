@@ -42,7 +42,7 @@ if(USE_ASAN)
     set(CMAKE_COMMON_FLAGS "${CMAKE_COMMON_FLAGS} -fsanitize=address")
     # ASAN_OPTIONS=detect_leaks=0
     # set(CMAKE_COMMON_FLAGS "${CMAKE_COMMON_FLAGS} -fsanitize=leak")
-    # set(CMAKE_COMMON_FLAGS "${CMAKE_COMMON_FLAGS} -fsanitize=undefined")
+    set(CMAKE_COMMON_FLAGS "${CMAKE_COMMON_FLAGS} -fsanitize=undefined")
     # set(CMAKE_COMMON_FLAGS "${CMAKE_COMMON_FLAGS} -fsanitize=thread") # The option cannot be combined with -fsanitize=address
 endif()
 
@@ -57,6 +57,8 @@ if(USE_TSAN)
     set(CMAKE_COMMON_FLAGS "${CMAKE_COMMON_FLAGS} -fsanitize=thread")
 endif()
 
+add_subdirectory(deps)
+
 add_executable(tpcc-generator
     main.cpp
     TpccGenerator.cpp
@@ -66,6 +68,6 @@ add_executable(tpcc-generator
 
 target_include_directories(tpcc-generator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# target_link_libraries(tpcc-generator ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(tpcc-generator external)
 
 # install(TARGETS tpcc-generator DESTINATION bin)
