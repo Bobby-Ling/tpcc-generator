@@ -75,7 +75,7 @@ Schema TpccGenerator::createCustomerSchema() {
     schema.addColumn("c_ytd_payment", ColumnType::FLOAT);
     schema.addColumn("c_payment_cnt", ColumnType::INT);
     schema.addColumn("c_delivery_cnt", ColumnType::INT);
-    schema.addColumn("c_data", ColumnType::CHAR, 300);
+    schema.addColumn("c_data", ColumnType::CHAR, 255);
     return schema;
 }
 
@@ -295,7 +295,7 @@ void TpccGenerator::generateCustomerAndHistory() {
                 float c_discount = ((float) makeNumber(0L, 50L)) / 100.0f;
                 float c_balance = -10.0f;
                 std::string c_since = makeNowAsString();
-                std::string c_data = makeAlphaStringAsString(200, 300);
+                std::string c_data = makeAlphaStringAsString(200, 255);
 
                 // // @formatter:off
                 // c_csv << c_id << c_d_id << c_w_id << c_first << c_middle << c_last << c_street_1 << c_street_2 << c_city
