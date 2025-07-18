@@ -198,6 +198,7 @@ void TpccGenerator::generateWarehouses() {
     Schema schema = createWarehouseSchema();
 
     auto warehouseWriter = createWriter(schema);
+    warehouseWriter->writeSchema();
 
     for (int64_t w_id = 1; w_id <= warehouse_count_; w_id++) {
         Record record;
@@ -227,6 +228,7 @@ void TpccGenerator::generateDistricts() {
 
     Schema schema = createDistrictSchema();
     auto districtWriter = createWriter(schema);
+    districtWriter->writeSchema();
 
     // Each warehouse has DIST_PER_WARE (10) districts
     for (int64_t d_w_id = 1; d_w_id <= warehouse_count_; d_w_id++) {
@@ -262,10 +264,12 @@ void TpccGenerator::generateCustomerAndHistory() {
     // 生成customer数据
     Schema customerSchema = createCustomerSchema();
     auto customerWriter = createWriter(customerSchema);
+    customerWriter->writeSchema();
 
     // 生成history数据
     Schema historySchema = createHistorySchema();
     auto historyWriter = createWriter(historySchema);
+    historyWriter->writeSchema();
 
     // Each warehouse has DIST_PER_WARE (10) districts
     for (int64_t c_w_id = 1; c_w_id <= warehouse_count_; c_w_id++) {
@@ -361,6 +365,7 @@ void TpccGenerator::generateItems() {
 
     Schema schema = createItemSchema();
     auto itemWriter = createWriter(schema);
+    itemWriter->writeSchema();
 
     for (uint32_t i = 0; i < kItemCount / 10; i++) {
         uint32_t pos;
@@ -401,6 +406,7 @@ void TpccGenerator::generateStock() {
 
     Schema schema = createStockSchema();
     auto stockWriter = createWriter(schema);
+    stockWriter->writeSchema();
 
     for (int64_t s_w_id = 1; s_w_id <= warehouse_count_; s_w_id++) {
         orig.assign(kItemCount, false);
@@ -454,8 +460,11 @@ void TpccGenerator::generateOrdersAndOrderLines() {
     Schema newOrdersSchema = createNewOrdersSchema();
 
     auto ordersWriter = createWriter(ordersSchema);
+    ordersWriter->writeSchema();
     auto orderLineWriter = createWriter(orderLineSchema);
+    orderLineWriter->writeSchema();
     auto newOrdersWriter = createWriter(newOrdersSchema);
+    newOrdersWriter->writeSchema();
 
     // Generate ORD_PER_DIST (3000) orders and order line items for each district
     for (int64_t o_w_id = 1L; o_w_id <= warehouse_count_; o_w_id++) {

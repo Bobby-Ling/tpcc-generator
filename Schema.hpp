@@ -18,8 +18,20 @@ struct Column {
     ColumnType type;         // 列类型
     std::optional<int> size; // 对于CHAR类型，表示长度；对于其他类型可选
 
-    Column(const std::string& name, ColumnType type, std::optional<int> size = std::nullopt)
+    Column(const std::string &name, ColumnType type, std::optional<int> size = std::nullopt)
         : name(name), type(type), size(size) {}
+
+    std::string getSqlType() const {
+        switch (type) {
+            case ColumnType::INT:
+                return "int";
+            case ColumnType::FLOAT:
+                return "float";
+            case ColumnType::CHAR:
+                return "char(" + std::to_string(size.value()) + ")";
+        }
+        return "";
+    }
 };
 
 // 数据值类型
