@@ -13,6 +13,17 @@ void CsvWriter::beginTable() {
         std::cout << "abooooooorting !!!!!!" << std::endl;
         exit(-1);
     }
+    // 打印表头
+    // w_id,w_name,w_street_1,w_street_2,w_city,w_state,w_zip,w_tax,w_ytd
+    auto columns = schema_.getColumns();
+    for (size_t i = 0; i < columns.size(); i++) {
+        const auto& column = columns[i];
+        out_ << column.name;
+        if (i != columns.size() - 1) {
+            out_ << ",";
+        }
+    }
+    out_ << "\n";
     first_word_in_line_ = true;
 }
 
